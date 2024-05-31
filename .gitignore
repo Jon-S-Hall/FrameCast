@@ -1,0 +1,10 @@
+env/
+.idea/
+.vscode/
+__pycache__/
+.DS_Store
+*.so
+
+*.mp4
+*.heic
+output_videos/
