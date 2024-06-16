@@ -1,5 +1,7 @@
+import datetime
+
 import cv2
-from moviepy.editor import *
+from moviepy.editor import CompositeVideoClip, ImageClip, VideoFileClip
 from moviepy.video.fx import *
 from moviepy.video.tools.drawing import *
 from moviepy.video.fx.all import *
@@ -9,12 +11,22 @@ import numpy as np
 import csv
 import time
 
+IsTest = True
+# Open the CSI camera using GStreamer pipeline
+pipeline = (
+    "nvarguscamerasrc ! video/x-raw(memory:NVMM), "
+    "width=1280, height=720, framerate=30/1, format=NV12 ! "
+    "nvvidconv flip-method=2 ! video/x-raw, format=BGRx ! "
+    "videoconvert ! video/x-raw, format=BGR ! appsink"
+)
+
 
 def main():
     # Start projecter screen and capture coordinates of frames within space (edge detect)
 
     totalCanvasSize = GetCanvasSize()
     picFrames = GetPicFrames()
+
     print(f'picFrames {picFrames}')
 
     print(f'canvas {totalCanvasSize}')
@@ -76,7 +88,11 @@ def DisplayCalibrationSquare():
     window.quit()
 
 def CaptureWebcamPhoto():
-    cap = cv2.VideoCapture(0)
+
+    if IsTest:
+        cap = cv2.VideoCapture(0)
+    else:
+        cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
 
     if not cap.isOpened():
         print("Could not open webcam.");
@@ -84,8 +100,18 @@ def CaptureWebcamPhoto():
 
     time.sleep(3)
     ret, frame = cap.read()
-    cv2.imshow('Captured Image', frame)
-    cv2.waitKey(0)
+
+    if IsTest:
+        cv2.imshow('Captured Image', frame)
+        cv2.waitKey(0)
+
+    if ret:
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        filename = f"images/Calibration_Image.jpg"
+        cv2.imwrite(filename, frame)
+    else:
+        print("Error: Can't recieve frame. Exiting...")
+
 
     cap.release()
 
@@ -96,7 +122,12 @@ def GetCanvasSize():
     return [(0, 0), (800, 0), (800, 600), (0, 600)]
 
 def GetWebcamPhotoEdges():
-    image = cv2.imread('images/wall03.png')
+    if IsTest:
+        image = cv2.imread('images/wall03.png')
+    else:
+        image = cv2.imread('images/Calibration_Image.jpg')
+
+
     img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     blurred_image = cv2.GaussianBlur(image, (5, 5), 0)
     ret, img_inv_binary = cv2.threshold(img_gray, 100, 255, cv2.THRESH_BINARY_INV)
@@ -129,11 +160,11 @@ def GetWebcamPhotoEdges():
                 continue
             elif len(approx) == 4:
                 print("square")
+                shapes.append(approx)
             elif len(approx) == 9:
                 print("half-circle")
             elif len(approx) > 15:
                 print("circle")
-            shapes.append(approx)
 
     return shapes
 
