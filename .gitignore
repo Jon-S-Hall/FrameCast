@@ -5,6 +5,7 @@ __pycache__/
 .DS_Store
 *.so
 
-*.mp4
+input_videos/
 *.heic
 output_videos/
+Archive/
