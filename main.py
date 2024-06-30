@@ -10,6 +10,7 @@ import gizeh
 import numpy as np
 import csv
 import time
+from defisheye import Defisheye
 
 IsTest = True
 Buffer = 0
@@ -75,7 +76,7 @@ def DisplayCalibrationSquare():
     canvas.create_rectangle(CALIBRATION_MARGIN, CALIBRATION_MARGIN, projectionWidth-CALIBRATION_MARGIN, projectionHeight-CALIBRATION_MARGIN, fill='', outline='black', width=CALIBRATION_MARGIN_WIDTH)
 
     def ProcessAndCloseCalibrationSquare():
-        CaptureWebcamPhoto()
+        CaptureWebcamPhoto(f"images/Calibration_Image.jpg")
         window.destroy()
         window.quit()
 
@@ -84,12 +85,12 @@ def DisplayCalibrationSquare():
     window.quit()
     return projectionWidth, projectionHeight
 
-def CaptureWebcamPhoto():
+def CaptureWebcamPhoto(outputFileName):
 
     if IsTest:
         cap = cv2.VideoCapture(0)
     else:
-        cap = cv2.VideoCapture(pipeline, cv2.GAP_GSTREAMER)
+        cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
 
     if not cap.isOpened():
         print("Could not open webcam.");
@@ -104,7 +105,8 @@ def CaptureWebcamPhoto():
 
     if ret:
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        filename = f"images/Calibration_Image.jpg"
+        filename = outputFileName
+        #filename = f"images/Calibration_Image.jpg"
         cv2.imwrite(filename, frame)
     else:
         print("Error: Can't recieve frame. Exiting...")
@@ -115,12 +117,64 @@ def CaptureWebcamPhoto():
 
 def GetCanvasSize():
     if not IsTest:
-        DisplayCalibrationSquare()
+        fov, pfov = GetFishEyeCorrectionParameters()
+        print("fov and pfov retrieved")
+        CanvasTrueWidth, CanvasTrueHeight = DisplayCalibrationSquare()
 
     projectionPlaneEdges = FindProjectionPlaneRelativeEdgesFromCam()
     print("canvas edges: " + str(projectionPlaneEdges))
     return projectionPlaneEdges
     #return [(0, 0), (800, 0), (800, 600), (0, 600)]
+
+def GetFishEyeCorrectionParameters():
+    window = tk.Tk()
+    window.attributes('-fullscreen', True)
+    window.update()
+
+    projectionWidth = window.winfo_width()
+    projectionHeight = window.winfo_height()
+
+    CalibrationSquareSide = projectionHeight
+    centerWidth = projectionWidth/2
+    halfCalibrationSquareSide = CalibrationSquareSide/2
+
+    leftSideCalibrationSquare = centerWidth-halfCalibrationSquareSide
+
+    canvas = tk.Canvas(window, width=projectionWidth, height=projectionHeight, bg='white')
+    canvas.pack()
+
+    canvas.create_rectangle(leftSideCalibrationSquare, 0, leftSideCalibrationSquare + CalibrationSquareSide, CalibrationSquareSide, fill='#00FF00', outline='#00FF00')
+
+    def ProcessAndCloseCalibrationSquare():
+        CaptureWebcamPhoto(f"images/distorted_calibration_img.jpg")
+        window.destroy()
+        window.quit()
+
+    window.after(3000, ProcessAndCloseCalibrationSquare)
+    window.mainloop()
+    window.quit()
+
+    return CorrectFisheyeDistortion()
+
+def CorrectFisheyeDistortion():
+    image = cv2.imread('images/distortion_calibration_original.jpg')
+
+    dtype = 'linear'
+    format = 'fullframe'
+    fov = 80
+    pfov = 70
+
+    img = "images/Defisheye/Calibration_Image.jpg"
+    img_out = f"images/calibration_image_corrected_{dtype}_{format}_{pfov}_{fov}.jpg"
+    xcenter = -1
+
+    obj = Defisheye(img, dtype=dtype, format=format, fov=fov, pfov=pfov)
+
+    # To save image locally
+    obj.convert(outfile=img_out)
+
+    return fov, pfov
+
 
 def FindProjectionPlaneRelativeEdgesFromCam():
     if IsTest:
