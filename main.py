@@ -162,6 +162,28 @@ def GetFishEyeCorrectionParameters():
 
     def ProcessAndCloseCalibrationSquare():
         CaptureWebcamPhoto(f"images/Calibration_Image_Green.jpg")
+        canvas.delete("all")
+        DisplayBlueSquare(leftSideCalibrationSquare, CalibrationSquareSide)
+
+    def DisplayBlueSquare(leftSideCalibrationSquare, CalibrationSquareSide):
+        canvas.create_rectangle(leftSideCalibrationSquare, 0,
+                                leftSideCalibrationSquare + CalibrationSquareSide, CalibrationSquareSide,
+                                fill='#0000FF', outline='#0000FF')
+        window.after(3000, CaptureAndCloseBlueSquare)
+
+    def CaptureAndCloseBlueSquare():
+        CaptureWebcamPhoto(f"images/Calibration_Image_Blue.jpg")
+        canvas.delete("all")
+        DisplayRedSquare(leftSideCalibrationSquare, CalibrationSquareSide)
+
+    def DisplayRedSquare(leftSideCalibrationSquare, CalibrationSquareSide):
+        canvas.create_rectangle(leftSideCalibrationSquare, 0,
+                                leftSideCalibrationSquare + CalibrationSquareSide, CalibrationSquareSide,
+                                fill='#FF0000', outline='#FF0000')
+        window.after(3000, CaptureAndCloseRedSquare)
+
+    def CaptureAndCloseRedSquare():
+        CaptureWebcamPhoto(f"images/Calibration_Image_Red.jpg")
         window.destroy()
         window.quit()
 
