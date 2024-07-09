@@ -19,9 +19,9 @@ CALIBRATION_MARGIN = 10
 CALIBRATION_MARGIN_WIDTH = 20
 # Open the CSI camera using GStreamer pipeline
 pipeline = (
-    "nvarguscamerasrc ! video/x-raw(memory:NVMM), "
-    "width=1280, height=720, framerate=30/1, format=NV12 ! "
-    "nvvidconv flip-method=2 ! video/x-raw, format=BGRx ! "
+    "nvarguscamerasrc exposuretimerange=\"100000000 100000000\" ! video/x-raw(memory:NVMM), "
+    "width=3280, height=2464, framerate=21/1, format=NV12 ! "
+    "nvvidconv flip-method=0 ! video/x-raw, format=BGRx ! "
     "videoconvert ! video/x-raw, format=BGR ! appsink"
 )
 
