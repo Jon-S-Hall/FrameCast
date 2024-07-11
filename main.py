@@ -11,6 +11,7 @@ import numpy as np
 import csv
 import time
 from defisheye import Defisheye
+import imutils
 
 IsTest = True
 Buffer = 0
@@ -134,7 +135,11 @@ def GetCanvasSize():
         print("fov and pfov retrieved")
         CanvasTrueWidth, CanvasTrueHeight = DisplayCalibrationSquare()
 
-    fov, pfov = CorrectFisheyeDistortion()
+    fov, pfov = CorrectFisheyeDistortion(f'images/Calibration_Image_Green.jpg', f'images/Defished_Calibration_Image_Green')
+    fov, pfov = CorrectFisheyeDistortion(f'images/Calibration_Image_Red.jpg',
+                                         f'images/Defished_Calibration_Image_Red')
+    fov, pfov = CorrectFisheyeDistortion(f'images/Calibration_Image_Blue.jpg',
+                                         f'images/Defished_Calibration_Image_Blue')
     print("corrected fisheye")
     projectionPlaneEdges = FindProjectionPlaneRelativeEdgesFromCam()
     print("canvas edges: " + str(projectionPlaneEdges))
@@ -184,8 +189,20 @@ def GetFishEyeCorrectionParameters():
 
     def CaptureAndCloseRedSquare():
         CaptureWebcamPhoto(f"images/Calibration_Image_Red.jpg")
+        canvas.delete("all")
+        DisplayWhiteSquare(leftSideCalibrationSquare, CalibrationSquareSide)
+
+    def DisplayWhiteSquare(leftSideCalibrationSquare, CalibrationSquareSide):
+        canvas.create_rectangle(leftSideCalibrationSquare, 0,
+                                leftSideCalibrationSquare + CalibrationSquareSide, CalibrationSquareSide,
+                                fill='#FFFFFF', outline='#FFFFFF')
+        window.after(3000, CaptureAndCloseWhiteSquare)
+
+    def CaptureAndCloseWhiteSquare():
+        CaptureWebcamPhoto(f"images/Calibration_Image_White.jpg")
         window.destroy()
         window.quit()
+
 
     window.after(3000, ProcessAndCloseCalibrationSquare)
     window.mainloop()
@@ -193,24 +210,18 @@ def GetFishEyeCorrectionParameters():
 
     return
 
-def CorrectFisheyeDistortion():
-    image_path = f'images/Calibration_Image_Green.jpg'
-    image = cv2.imread(image_path)
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    # Define the range for green color
-    lower_green = np.array([30, 45, 45])
-    upper_green = np.array([90, 255, 255])
-    mask = cv2.inRange(hsv, lower_green, upper_green)
-    cv2.imshow('distorted_fisheye_mask', hsv)
-    cv2.waitKey(0)
+def CorrectFisheyeDistortion(image_path, output_path):
+    #image = cv2.imread(image_path)
+    image = GetSuperImposedCalibrationImage()
 
+    cv2.imwrite(f'images/SuperImposed_Calibration_Image.jpg', image)
 
     dtype = 'linear'
     format = 'fullframe'
-    fov = 80
+    fov = 140
     pfov = 70
 
-    img_out = f"images/calibration_image_corrected_{dtype}_{format}_{pfov}_{fov}.jpg"
+    img_out = output_path + f"_{dtype}_{format}_{pfov}_{fov}.jpg"
     xcenter = -1
 
     obj = Defisheye(image_path, dtype=dtype, format=format, fov=fov, pfov=pfov)
@@ -220,36 +231,89 @@ def CorrectFisheyeDistortion():
 
     return fov, pfov
 
+def GetSuperImposedCalibrationImage(absoluteCanvasPos):
+    image_paths = ["images/Defished_Calibration_Image_Green_linear_fullframe_70_140.jpg",
+                   "images/Defished_Calibration_Image_Red_linear_fullframe_70_140.jpg",
+                   "images/Defished_Calibration_Image_Blue_linear_fullframe_70_140.jpg"]
+    # Read and convert images to grayscale
+    imageRed = cv2.imread(image_paths[1])
+
+    hsv = cv2.cvtColor(imageRed, cv2.COLOR_BGR2HSV)
+
+    # Define the red color range in HSV
+    lower_red = np.array([0, 120, 70])
+    upper_red = np.array([10, 255, 255])
+    mask1 = cv2.inRange(hsv, lower_red, upper_red)
+
+    lower_red = np.array([170, 120, 70])
+    upper_red = np.array([180, 255, 255])
+    mask2 = cv2.inRange(hsv, lower_red, upper_red)
+
+    # Combine the masks
+    mask = mask1 | mask2
+
+    # Invert the mask to get the non-red regions
+    mask_inv = cv2.bitwise_not(mask)
+
+    # Remove the red color from the image using the mask
+    image_no_red = cv2.bitwise_and(imageRed, imageRed, mask=mask_inv)
+
+    # Convert the image back to BGR (if needed)
+    # If further processing needs the BGR format, otherwise skip this step
+    # image_no_red_bgr = cv2.cvtColor(image_no_red, cv2.COLOR_HSV2BGR)
+
+    # Apply thresholding
+    gray_image = cv2.cvtColor(image_no_red, cv2.COLOR_BGR2GRAY)
+    _, thresholded_image = cv2.threshold(gray_image, 128, 255, cv2.THRESH_BINARY)
+
+    #normalized_images = [cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX) for img in images]
+    #super_imposed_image = np.mean(normalized_images, axis=0).astype(np.uint8)
+
+    cv2.imshow('removedredfromred', image_no_red)
+    cv2.waitKey(0)
+
+    return 0
 
 def FindProjectionPlaneRelativeEdgesFromCam():
     if IsTest:
-        image = cv2.imread('images/calibration_image_corrected_linear_fullframe_70_80.jpg')
+        image = cv2.imread(f'images/Defished_Calibration_Image_Green_linear_fullframe_70_140.jpg')
     else:
         image = cv2.imread('images/Calibration_Image.jpg')
 
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    #cv2.imshow('mask', super_imposed_image)
+    #cv2.waitKey(0)
+    alpha = 1.6  # Contrast control (1.0-3.0)
+    beta = 50  # Brightness control (0-100)
+    bright_contrast = cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
+    hsv = cv2.cvtColor(bright_contrast, cv2.COLOR_BGR2HSV)
 
     # Define the range for green color
-    lower_green = np.array([30, 40, 35])
-    upper_green = np.array([90, 255, 255])
+    lower_green = np.array([35, 100, 100])
+    upper_green = np.array([65, 255, 255])
 
     # Create a mask for the green color
+
     mask = cv2.inRange(hsv, lower_green, upper_green)
-    blurred_image = cv2.GaussianBlur(mask, (3, 3), 0)
+    #img_gray = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+    blurred_image = cv2.GaussianBlur(mask, (33, 33), 0)
+
+    # Perform morpholgical operations
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
+    opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    close = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel, iterations=1)
 
     # edges is a 2d array (representing the image pixels)
     # values are at where edges are detected.
-    edges = cv2.Canny(blurred_image, threshold1=50, threshold2=75)  # 100, 150
-    contours, h = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    edges = cv2.Canny(blurred_image, threshold1=100, threshold2=150)  # 100, 150
+    contours, h = cv2.findContours(close, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     shapes = []
     if AllowApproxFrameDetection:
-        min_area = 30000
-        max_area = 1000000
+        min_area = 300000
+        max_area = 100000000
         for cnt in contours:
-            epsilon = 0.02 * cv2.arcLength(cnt, True)
+            epsilon = 0.05 * cv2.arcLength(cnt, True)
             approx = cv2.approxPolyDP(cnt, epsilon, True)
-
             if LooksLikeFrame(approx, min_area, max_area):
                 if len(shapes) > 0:
                     shapes[0] = FindInnerMostSquare(approx, shapes[0])
@@ -284,6 +348,8 @@ def FindProjectionPlaneRelativeEdgesFromCam():
         cv2.imshow('mask', mask)
         cv2.waitKey(0)
         cv2.imshow('edges', edges)
+        cv2.waitKey(0)
+        cv2.imshow('close', close)
         cv2.waitKey(0)
         contour_image1 = image.copy()
         cv2.drawContours(contour_image1, contours, -1, (0, 0, 255), 2)  # Draw contours in red
@@ -325,11 +391,12 @@ def SimplifyImageDimensions(image, absoluteCanvasPos):
 
 def FindFrameAbsoluteEdgesFromCam(absoluteCanvasPos):
     if IsTest:
-        image = cv2.imread('images/calibration_image_corrected_linear_fullframe_70_80.jpg')
+        image = cv2.imread('images/calibration_image_corrected_linear_fullframe_70_140.jpg')
     else:
         image = cv2.imread('images/Calibration_Image.jpg')
 
-    alignedImage = SimplifyImageDimensions(image, absoluteCanvasPos)
+    superimposedImage = GetSuperImposedCalibrationImage(absoluteCanvasPos)
+    alignedImage = SimplifyImageDimensions(superimposedImage, absoluteCanvasPos)
     heights = [point[1] for point in absoluteCanvasPos]
     widths = [point[0] for point in absoluteCanvasPos]
 
@@ -337,37 +404,17 @@ def FindFrameAbsoluteEdgesFromCam(absoluteCanvasPos):
     endY = max(heights) - Buffer
     startX = min(widths) + Buffer
     endX = max(widths) - 2*Buffer
-    cropped_image = image[startY:endY, startX:endX]
-    hsv = cv2.cvtColor(alignedImage, cv2.COLOR_BGR2HSV)
 
-    # Define the range for green color
-    lower_green = np.array([30, 45, 25])
-    upper_green = np.array([90, 255, 255])
+    #img_gray = cv2.cvtColor(alignedImage, cv2.COLOR_BGR2GRAY)
 
-    # Create a mask for the green color
-    mask = cv2.inRange(hsv, lower_green, upper_green)
-
-
-    # sobel
-    #sobelx = cv2.Sobel(alignedImage, cv2.CV_64F, 1, 0, ksize=5)
-    #sobely = cv2.Sobel(alignedImage, cv2.CV_64F, 0, 1, ksize=5)
-    #sobel_combined = cv2.sqrt(sobelx ** 2 + sobely ** 2)
-    #sobel_combined = cv2.convertScaleAbs(sobel_combined)
-    #cv2.imshow('sobel', sobel_combined)
-    #cv2.waitKey(0)
-
-    # Invert the mask
-    mask_inv = cv2.bitwise_not(mask)
-    result = cv2.bitwise_and(alignedImage, alignedImage, mask=mask_inv)
-    img_gray = cv2.cvtColor(alignedImage, cv2.COLOR_BGR2GRAY)
     # Apply Histogram Equalization
     # equalized = cv2.equalizeHist(img_gray)
     # Increase brightness and contrast
     alpha = 1.5 # Contrast control (1.0-3.0)
     beta = 80  # Brightness control (0-100)
-    bright_contrast = cv2.convertScaleAbs(img_gray, alpha=alpha, beta=beta)
+    bright_contrast = cv2.convertScaleAbs(alignedImage, alpha=alpha, beta=beta)
     blurred_image = cv2.GaussianBlur(bright_contrast, (5, 5), 0)
-    ret, img_inv_binary = cv2.threshold(img_gray, 100, 255, cv2.THRESH_BINARY_INV)
+    ret, img_inv_binary = cv2.threshold(blurred_image, 120, 255, cv2.THRESH_BINARY_INV)
     # edges is a 2d array (representing the image pixels)
     # values are at where edges are detected.
     edges = cv2.Canny(blurred_image, threshold1=20, threshold2=25) #100, 150
@@ -379,6 +426,8 @@ def FindFrameAbsoluteEdgesFromCam(absoluteCanvasPos):
         cv2.imshow('Shapes', edges)
         cv2.waitKey(0)
         cv2.imshow('photo cropped', bright_contrast)
+        cv2.waitKey(0)
+        cv2.imshow('rev image binary', img_inv_binary)
         cv2.waitKey(0)
         contour_image = alignedImage.copy()
         cv2.drawContours(contour_image, contours, -1, (0, 0, 255), 2)  # Draw contours in red
